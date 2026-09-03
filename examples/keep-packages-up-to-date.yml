@@ -19,7 +19,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: valtzu/gh-action-mkosi-bump@v1
         with:
-          mode: both
+          bump-version: "true"
+          bump-snapshot: "true"
+          bump-tools-tree-snapshot: "false"
           install-mkosi: "true"
           mkosi-version: "v27"
           # mkosi's sandbox needs unprivileged user namespaces, which

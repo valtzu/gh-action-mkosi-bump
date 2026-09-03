@@ -6,10 +6,17 @@ branding:
   color: 'blue'
 
 inputs:
-  # --- what to update ---
-  mode:
-    description: 'What to update: "bump" (run `mkosi bump`), "snapshot" (update Snapshot= from `mkosi latest-snapshot`), or "both".'
-    default: 'both'
+  # --- what to update (each is applied independently; at least one must be true) ---
+  bump-version:
+    description: 'Run `mkosi bump` to increment the image version in `mkosi.version`.'
+    default: 'true'
+  bump-snapshot:
+    description: 'Update `Snapshot=` in the `[Distribution]` section from `mkosi latest-snapshot`.'
+    default: 'true'
+  bump-tools-tree-snapshot:
+    description: 'Update `ToolsTreeSnapshot=` in the `[Build]` section from `mkosi latest-snapshot`.'
+    default: 'false'
+
   working-directory:
     description: 'Directory the mkosi config lives in / where mkosi is invoked.'
     default: '.'
@@ -19,9 +26,6 @@ inputs:
   mkosi-args:
     description: 'Extra global args passed to every mkosi invocation (e.g. "--distribution debian").'
     default: ''
-  snapshot-settings:
-    description: 'Which snapshot setting(s) to bump in snapshot mode: comma-separated list of "Snapshot" ([Distribution]) and/or "ToolsTreeSnapshot" ([Build]).'
-    default: 'Snapshot'
   latest-snapshot-args:
     description: 'Extra args appended to `mkosi latest-snapshot` when resolving `Snapshot=`.'
     default: ''
@@ -162,10 +166,11 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         GH_TOKEN: ${{ inputs.github-token }}
-        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_BUMP_VERSION: ${{ inputs.bump-version }}
+        INPUT_BUMP_SNAPSHOT: ${{ inputs.bump-snapshot }}
+        INPUT_BUMP_TOOLS_TREE_SNAPSHOT: ${{ inputs.bump-tools-tree-snapshot }}
         INPUT_MKOSI_CONFIG: ${{ inputs.mkosi-config }}
         INPUT_MKOSI_ARGS: ${{ inputs.mkosi-args }}
-        INPUT_SNAPSHOT_SETTINGS: ${{ inputs.snapshot-settings }}
         INPUT_LATEST_SNAPSHOT_ARGS: ${{ inputs.latest-snapshot-args }}
         INPUT_TOOLS_TREE_LATEST_SNAPSHOT_ARGS: ${{ inputs.tools-tree-latest-snapshot-args }}
         INPUT_GIT_USER_NAME: ${{ inputs.git-user-name }}

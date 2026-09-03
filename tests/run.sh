@@ -36,7 +36,7 @@ outval() { sed -nE "s/^$2=(.*)/\1/p" "$1/output" | tail -n1; }
 # --------------------------------------------------------------------------
 echo "test: bump mode increments mkosi.version"
 wd="$(workdir)"; echo -n "1.2.3" > "$wd/mkosi.version"
-run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_MODE=bump
+run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_BUMP_SNAPSHOT=false
 check "new-version" "$(outval "$wd" new-version)" "1.2.4"
 check "old-version" "$(outval "$wd" old-version)" "1.2.3"
 check "changed"     "$(outval "$wd" changed)"     "true"
@@ -46,7 +46,7 @@ rm -rf "$wd"
 echo "test: snapshot mode rewrites existing Snapshot="
 wd="$(workdir)"
 printf '[Distribution]\nDistribution=debian\nSnapshot=20230101T000000Z\n' > "$wd/mkosi.conf"
-run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_MODE=snapshot FAKE_MKOSI_SNAPSHOT=20240202T000000Z
+run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_BUMP_VERSION=false FAKE_MKOSI_SNAPSHOT=20240202T000000Z
 check "new-snapshot" "$(outval "$wd" new-snapshot)" "20240202T000000Z"
 check "file updated"  "$(grep -c 'Snapshot=20240202T000000Z' "$wd/mkosi.conf")" "1"
 check "old kept once" "$(grep -c 'Snapshot=' "$wd/mkosi.conf")" "1"
@@ -56,7 +56,7 @@ rm -rf "$wd"
 echo "test: snapshot mode inserts Snapshot= under [Distribution] when missing"
 wd="$(workdir)"
 printf '[Distribution]\nDistribution=debian\n' > "$wd/mkosi.conf"
-run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_MODE=snapshot FAKE_MKOSI_SNAPSHOT=20240303T000000Z
+run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_BUMP_VERSION=false FAKE_MKOSI_SNAPSHOT=20240303T000000Z
 check "inserted" "$(grep -c 'Snapshot=20240303T000000Z' "$wd/mkosi.conf")" "1"
 rm -rf "$wd"
 
@@ -64,7 +64,7 @@ rm -rf "$wd"
 echo "test: no change when snapshot already current -> changed=false"
 wd="$(workdir)"
 printf '[Distribution]\nSnapshot=20240115T000000Z\n' > "$wd/mkosi.conf"
-run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_MODE=snapshot FAKE_MKOSI_SNAPSHOT=20240115T000000Z
+run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_BUMP_VERSION=false FAKE_MKOSI_SNAPSHOT=20240115T000000Z
 check "changed" "$(outval "$wd" changed)" "false"
 rm -rf "$wd"
 
@@ -72,7 +72,7 @@ rm -rf "$wd"
 echo "test: latest-snapshot failure is fatal"
 wd="$(workdir)"
 printf '[Distribution]\nSnapshot=x\n' > "$wd/mkosi.conf"
-run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_MODE=snapshot FAKE_MKOSI_SNAPSHOT_RC=1
+run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_BUMP_VERSION=false FAKE_MKOSI_SNAPSHOT_RC=1
 check "exit code" "$?" "1"
 rm -rf "$wd"
 
@@ -80,8 +80,8 @@ rm -rf "$wd"
 echo "test: ToolsTreeSnapshot inserted into [Build], Snapshot untouched"
 wd="$(workdir)"
 printf '[Distribution]\nDistribution=arch\nSnapshot=20240101T000000Z\n\n[Build]\nToolsTree=default\n' > "$wd/mkosi.conf"
-run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_MODE=snapshot \
-  INPUT_SNAPSHOT_SETTINGS=ToolsTreeSnapshot \
+run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 \
+  INPUT_BUMP_VERSION=false INPUT_BUMP_SNAPSHOT=false INPUT_BUMP_TOOLS_TREE_SNAPSHOT=true \
   INPUT_TOOLS_TREE_LATEST_SNAPSHOT_ARGS=--tools \
   FAKE_MKOSI_TT_SNAPSHOT=20240505T000000Z
 check "tt output"    "$(outval "$wd" new-tools-tree-snapshot)" "20240505T000000Z"
@@ -94,8 +94,8 @@ rm -rf "$wd"
 echo "test: both snapshot settings at once, different values"
 wd="$(workdir)"
 printf '[Distribution]\nSnapshot=old\n\n[Build]\nToolsTreeSnapshot=oldtt\n' > "$wd/mkosi.conf"
-run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_MODE=snapshot \
-  INPUT_SNAPSHOT_SETTINGS="Snapshot, ToolsTreeSnapshot" \
+run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 \
+  INPUT_BUMP_VERSION=false INPUT_BUMP_SNAPSHOT=true INPUT_BUMP_TOOLS_TREE_SNAPSHOT=true \
   INPUT_TOOLS_TREE_LATEST_SNAPSHOT_ARGS=--tools \
   FAKE_MKOSI_SNAPSHOT=newmain FAKE_MKOSI_TT_SNAPSHOT=newtt
 check "main"     "$(outval "$wd" new-snapshot)" "newmain"
@@ -108,7 +108,7 @@ rm -rf "$wd"
 echo "test: both mode + tag prefix/suffix in version output"
 wd="$(workdir)"; echo -n "0.1.0" > "$wd/mkosi.version"
 printf '[Distribution]\nSnapshot=old\n' > "$wd/mkosi.conf"
-run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_MODE=both INPUT_TAG_PREFIX=v INPUT_TAG_SUFFIX=-ci FAKE_MKOSI_SNAPSHOT=new
+run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_TAG_PREFIX=v INPUT_TAG_SUFFIX=-ci FAKE_MKOSI_SNAPSHOT=new
 check "version" "$(outval "$wd" version)" "v0.1.1-ci"
 rm -rf "$wd"
 
@@ -119,7 +119,7 @@ wd="$(workdir)"; ( cd "$wd" || exit 1
   echo -n "1.0.0" > mkosi.version
   printf '[Distribution]\nSnapshot=s0\n' > mkosi.conf
   git add -A; git commit -qm init )
-run_bump "$wd" INPUT_MODE=both INPUT_SKIP_PUSH=true INPUT_TAG_PREFIX=v FAKE_MKOSI_SNAPSHOT=s1
+run_bump "$wd" INPUT_SKIP_PUSH=true INPUT_TAG_PREFIX=v FAKE_MKOSI_SNAPSHOT=s1
 rc=$?
 check "exit code" "$rc" "0"
 check "committed"  "$(cd "$wd" && git log -1 --pretty=%s)" "ci: bump mkosi packages to v1.0.1"

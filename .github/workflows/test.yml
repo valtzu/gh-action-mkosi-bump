@@ -65,8 +65,8 @@ jobs:
         id: bump
         with:
           working-directory: /tmp/proj
-          mode: both
-          snapshot-settings: Snapshot
+          bump-version: "true"
+          bump-snapshot: "true"
           install-mkosi: "true"
           mkosi-version: "v27"
           relax-userns-restriction: "true"

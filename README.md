@@ -35,7 +35,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: valtzu/gh-action-mkosi-bump@v1
         with:
-          mode: both
+          bump-version: "true"          # run `mkosi bump`
+          bump-snapshot: "true"         # update Snapshot= from `mkosi latest-snapshot`
           install-mkosi: "true"
           mkosi-version: "v27"
           pull-request: "true"
@@ -44,19 +45,20 @@ jobs:
 
 More examples in [`examples/`](examples/).
 
-## Modes
+## What it updates
 
-| `mode`     | Effect                                                                  |
-|------------|------------------------------------------------------------------------|
-| `bump`     | runs `mkosi bump`                                                       |
-| `snapshot` | runs `mkosi latest-snapshot` and rewrites the configured snapshot setting(s) if changed |
-| `both`     | *(default)* both of the above                                           |
+Three independent switches — enable any combination (at least one):
 
-`snapshot` mode updates whatever `snapshot-settings` lists — `Snapshot`
-(`[Distribution]`), `ToolsTreeSnapshot` (`[Build]`), or both. For each, the action
-finds the config file that already contains that line (top-level `mkosi.conf` or
-any `mkosi.conf.d/*.conf`); if none does, it writes one into `mkosi.conf` under
-the appropriate section. Override the target file with `mkosi-config`.
+| Input | Default | Effect |
+|-------|---------|--------|
+| `bump-version` | `true` | runs `mkosi bump` → increments `mkosi.version` |
+| `bump-snapshot` | `true` | runs `mkosi latest-snapshot`, rewrites `Snapshot=` in `[Distribution]` if it changed |
+| `bump-tools-tree-snapshot` | `false` | runs `mkosi latest-snapshot`, rewrites `ToolsTreeSnapshot=` in `[Build]` if it changed |
+
+For each snapshot setting the action finds the config file that already contains
+that line (top-level `mkosi.conf` or any `mkosi.conf.d/*.conf`); if none does, it
+writes one into `mkosi.conf` under the right section. Override the target file
+with `mkosi-config`.
 
 `mkosi latest-snapshot` resolves the snapshot for the *image* distribution. For
 `ToolsTreeSnapshot` you usually need `tools-tree-latest-snapshot-args` to point it
@@ -80,11 +82,12 @@ at the tools-tree distribution, e.g. `--distribution debian --release testing`.
 ### What to update
 | Input | Default | Description |
 |-------|---------|-------------|
-| `mode` | `both` | `bump`, `snapshot`, or `both` |
+| `bump-version` | `true` | run `mkosi bump` |
+| `bump-snapshot` | `true` | update `Snapshot=` (`[Distribution]`) from `mkosi latest-snapshot` |
+| `bump-tools-tree-snapshot` | `false` | update `ToolsTreeSnapshot=` (`[Build]`) from `mkosi latest-snapshot` |
 | `working-directory` | `.` | where the mkosi config lives / mkosi is invoked |
 | `mkosi-config` | *(auto)* | config file whose snapshot setting(s) to update |
 | `mkosi-args` | | extra global args for every mkosi call, e.g. `--distribution debian` |
-| `snapshot-settings` | `Snapshot` | which settings to bump: `Snapshot`, `ToolsTreeSnapshot`, or both (comma-separated) |
 | `relax-userns-restriction` | `false` | run `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` first (needed for `mkosi latest-snapshot` on GitHub-hosted runners) |
 | `latest-snapshot-args` | | extra args for `mkosi latest-snapshot` when resolving `Snapshot=` |
 | `tools-tree-latest-snapshot-args` | *(= latest-snapshot-args)* | ditto for `ToolsTreeSnapshot=`, e.g. `--distribution debian --release testing` |

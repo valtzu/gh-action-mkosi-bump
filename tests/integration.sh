@@ -21,7 +21,7 @@ export GITHUB_OUTPUT="$work/gh_output"; : > "$GITHUB_OUTPUT"
 outval() { sed -nE "s/^$1=(.*)/\1/p" "$GITHUB_OUTPUT" | tail -n1; }
 
 # --- bump ---
-INPUT_MODE=bump INPUT_SKIP_PUSH=true INPUT_TAG_PREFIX=v \
+INPUT_BUMP_SNAPSHOT=false INPUT_SKIP_PUSH=true INPUT_TAG_PREFIX=v \
   bash "$ROOT/scripts/bump.sh"
 
 old="$(outval old-version)"; new="$(outval new-version)"
@@ -34,7 +34,7 @@ echo "PASS: bump"
 # --- Snapshot= via mkosi latest-snapshot (needs snapshot.debian.org reachable) ---
 : > "$GITHUB_OUTPUT"
 git checkout -q .
-INPUT_MODE=snapshot INPUT_SKIP_COMMIT=true MKOSI_BUMP_DRY_RUN=1 \
+INPUT_BUMP_VERSION=false INPUT_SKIP_COMMIT=true MKOSI_BUMP_DRY_RUN=1 \
   bash "$ROOT/scripts/bump.sh"
 snap="$(outval new-snapshot)"
 [ -n "$snap" ] || { echo "FAIL: empty snapshot"; exit 1; }
@@ -44,8 +44,8 @@ echo "PASS: Snapshot -> $snap"
 # --- ToolsTreeSnapshot= into [Build], with explicit tools-tree distro args ---
 : > "$GITHUB_OUTPUT"
 git checkout -q .
-INPUT_MODE=snapshot INPUT_SKIP_COMMIT=true MKOSI_BUMP_DRY_RUN=1 \
-  INPUT_SNAPSHOT_SETTINGS=ToolsTreeSnapshot \
+INPUT_BUMP_VERSION=false INPUT_BUMP_SNAPSHOT=false INPUT_BUMP_TOOLS_TREE_SNAPSHOT=true \
+  INPUT_SKIP_COMMIT=true MKOSI_BUMP_DRY_RUN=1 \
   INPUT_TOOLS_TREE_LATEST_SNAPSHOT_ARGS="--distribution debian --release testing" \
   bash "$ROOT/scripts/bump.sh"
 tt="$(outval new-tools-tree-snapshot)"

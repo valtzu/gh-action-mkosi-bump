@@ -13,10 +13,11 @@ die()  { printf '::error::%s\n' "$*" >&2; exit 1; }
 : "${MKOSI_BUMP_DRY_RUN:=0}"
 
 # Input defaults (kept in sync with action.yml).
-: "${INPUT_MODE:=both}"
+: "${INPUT_BUMP_VERSION:=true}"
+: "${INPUT_BUMP_SNAPSHOT:=true}"
+: "${INPUT_BUMP_TOOLS_TREE_SNAPSHOT:=false}"
 : "${INPUT_MKOSI_CONFIG:=}"
 : "${INPUT_MKOSI_ARGS:=}"
-: "${INPUT_SNAPSHOT_SETTINGS:=Snapshot}"
 : "${INPUT_LATEST_SNAPSHOT_ARGS:=}"
 : "${INPUT_TOOLS_TREE_LATEST_SNAPSHOT_ARGS:=}"
 : "${INPUT_GIT_USER_NAME:=github-actions[bot]}"
@@ -47,6 +48,15 @@ MKOSI=(mkosi)
 
 command -v mkosi >/dev/null 2>&1 || die "mkosi not found on PATH (set install-mkosi: true or install it in a previous step)"
 log "Using $("${MKOSI[@]}" --version 2>/dev/null | head -n1)"
+
+# Which snapshot settings to update, derived from the per-setting toggles.
+SNAPSHOT_SETTINGS=()
+is_true "$INPUT_BUMP_SNAPSHOT"            && SNAPSHOT_SETTINGS+=(Snapshot)
+is_true "$INPUT_BUMP_TOOLS_TREE_SNAPSHOT" && SNAPSHOT_SETTINGS+=(ToolsTreeSnapshot)
+
+if ! is_true "$INPUT_BUMP_VERSION" && [ ${#SNAPSHOT_SETTINGS[@]} -eq 0 ]; then
+  die "nothing to do: enable at least one of bump-version / bump-snapshot / bump-tools-tree-snapshot"
+fi
 
 ###############################################################################
 # 1. Capture current state
@@ -91,7 +101,7 @@ SNAPSHOT_SUMMARY=""
 ###############################################################################
 # 2. Apply updates
 ###############################################################################
-if [ "$INPUT_MODE" = "bump" ] || [ "$INPUT_MODE" = "both" ]; then
+if is_true "$INPUT_BUMP_VERSION"; then
   group_begin "mkosi bump"
   "${MKOSI[@]}" bump
   group_end
@@ -134,21 +144,16 @@ update_snapshot() {
   fi
 }
 
-if [ "$INPUT_MODE" = "snapshot" ] || [ "$INPUT_MODE" = "both" ]; then
-  IFS=', ' read -r -a _settings <<<"$INPUT_SNAPSHOT_SETTINGS"
-  for s in "${_settings[@]}"; do
-    [ -n "$s" ] || continue
-    case "$s" in
-      Snapshot)          # shellcheck disable=SC2086
-        update_snapshot Snapshot $INPUT_LATEST_SNAPSHOT_ARGS ;;
-      ToolsTreeSnapshot)
-        _tt_args="${INPUT_TOOLS_TREE_LATEST_SNAPSHOT_ARGS:-$INPUT_LATEST_SNAPSHOT_ARGS}"
-        # shellcheck disable=SC2086
-        update_snapshot ToolsTreeSnapshot $_tt_args ;;
-      *) die "unknown snapshot setting: $s (expected Snapshot or ToolsTreeSnapshot)" ;;
-    esac
-  done
-fi
+for s in "${SNAPSHOT_SETTINGS[@]}"; do
+  case "$s" in
+    Snapshot)          # shellcheck disable=SC2086
+      update_snapshot Snapshot $INPUT_LATEST_SNAPSHOT_ARGS ;;
+    ToolsTreeSnapshot)
+      _tt_args="${INPUT_TOOLS_TREE_LATEST_SNAPSHOT_ARGS:-$INPUT_LATEST_SNAPSHOT_ARGS}"
+      # shellcheck disable=SC2086
+      update_snapshot ToolsTreeSnapshot $_tt_args ;;
+  esac
+done
 
 # Primary snapshot values exposed to templates / outputs.
 OLD_SNAPSHOT="${OLD_SNAP[Snapshot]:-}"
