@@ -51,7 +51,7 @@ Three independent switches — enable any combination (at least one):
 
 | Input | Default | Effect |
 |-------|---------|--------|
-| `bump-version` | `true` | runs `mkosi bump` → increments `mkosi.version` |
+| `bump-version` | `true` | `true` runs `mkosi bump` → increments `mkosi.version`. `patch` / `minor` / `major` instead increment that component of the latest `X.Y.Z` git tag and leave `mkosi.version` alone (for when it is a `git describe` script). `false` leaves the version untouched. |
 | `bump-snapshot` | `true` | runs `mkosi latest-snapshot`, rewrites `Snapshot=` in `[Distribution]` if it changed |
 | `bump-tools-tree-snapshot` | `false` | runs `mkosi latest-snapshot`, rewrites `ToolsTreeSnapshot=` in `[Build]` if it changed |
 
@@ -68,7 +68,10 @@ at the tools-tree distribution, e.g. `--distribution debian --release testing`.
 
 * `pull-request: false` *(default)* — commit straight to `target-branch`
   (or the branch the workflow runs on), then push, exactly like
-  `gh-action-bump-version`.
+  `gh-action-bump-version`. Set `dispatch-workflow` to a workflow file name to
+  `workflow_dispatch` it afterwards against the new tag (or the branch, if
+  nothing was tagged) — a tag pushed with `GITHUB_TOKEN` does not start
+  `on: push` runs, so this is how you kick a release build without a PAT.
 * `pull-request: true` with:
   * `pull-request-strategy: update` *(default)* — always uses the branch
     `pull-request-branch` (default `mkosi-bump`), force-pushes it and reuses the
@@ -105,6 +108,7 @@ at the tools-tree distribution, e.g. `--distribution debian --release testing`.
 | `skip-push` | `false` | don't push |
 | `commit-no-verify` | `false` | `git commit --no-verify` |
 | `target-branch` | *(current)* | branch to commit on in non-PR mode |
+| `dispatch-workflow` | | non-PR mode: `workflow_dispatch` this workflow after the push, against the new tag / branch |
 
 Template placeholders: `{{version}}`, `{{snapshot}}`, `{{tools_tree_snapshot}}`,
 `{{old_version}}`, `{{old_snapshot}}`, and `{{summary}}` (PR body only).
@@ -131,6 +135,7 @@ Template placeholders: `{{version}}`, `{{snapshot}}`, `{{tools_tree_snapshot}}`,
 
 * Direct commit / push: `permissions: contents: write`.
 * PR mode: also `pull-requests: write`.
+* `dispatch-workflow`: also `actions: write`.
 
 ## GitHub-hosted runner notes
 

@@ -128,5 +128,64 @@ check "new-tag out" "$(outval "$wd" new-tag)" "v1.0.1"
 rm -rf "$wd"
 
 # --------------------------------------------------------------------------
+echo "test: bump-version=patch increments the latest tag, leaves mkosi.version alone"
+wd="$(workdir)"; ( cd "$wd" || exit 1
+  git init -q -b main; git config user.email a@b.c; git config user.name t
+  printf '#!/bin/sh\necho scripted\n' > mkosi.version; chmod +x mkosi.version
+  printf '[Distribution]\nSnapshot=s0\n' > mkosi.conf
+  git add -A; git commit -qm init
+  git tag 0.8.3; git tag 0.8.4; git tag 0.10.0-rc1 )   # last one must be ignored
+run_bump "$wd" INPUT_BUMP_VERSION=patch INPUT_SKIP_PUSH=true FAKE_MKOSI_SNAPSHOT=s1
+check "exit code"      "$?" "0"
+check "new-version"    "$(outval "$wd" new-version)" "0.8.5"
+check "tagged"         "$(cd "$wd" && git tag --points-at HEAD)" "0.8.5"
+check "script intact"  "$(head -n1 "$wd/mkosi.version")" "#!/bin/sh"
+rm -rf "$wd"
+
+# --------------------------------------------------------------------------
+echo "test: bump-version=minor / major reset lower components"
+wd="$(workdir)"; ( cd "$wd" || exit 1
+  git init -q -b main; git config user.email a@b.c; git config user.name t
+  printf '[Distribution]\nSnapshot=s0\n' > mkosi.conf
+  git add -A; git commit -qm init; git tag v1.2.3 )
+run_bump "$wd" INPUT_BUMP_VERSION=minor INPUT_TAG_PREFIX=v INPUT_SKIP_PUSH=true FAKE_MKOSI_SNAPSHOT=s1
+check "minor" "$(outval "$wd" new-version)" "1.3.0"
+rm -rf "$wd"
+wd="$(workdir)"; ( cd "$wd" || exit 1
+  git init -q -b main; git config user.email a@b.c; git config user.name t
+  printf '[Distribution]\nSnapshot=s0\n' > mkosi.conf
+  git add -A; git commit -qm init; git tag v1.2.3 )
+run_bump "$wd" INPUT_BUMP_VERSION=major INPUT_TAG_PREFIX=v INPUT_SKIP_PUSH=true FAKE_MKOSI_SNAPSHOT=s1
+check "major" "$(outval "$wd" new-version)" "2.0.0"
+rm -rf "$wd"
+
+# --------------------------------------------------------------------------
+echo "test: bump-version=patch with no tags starts at 0.0.1"
+wd="$(workdir)"; ( cd "$wd" || exit 1
+  git init -q -b main; git config user.email a@b.c; git config user.name t
+  printf '[Distribution]\nSnapshot=s0\n' > mkosi.conf
+  git add -A; git commit -qm init )
+run_bump "$wd" INPUT_BUMP_VERSION=patch INPUT_SKIP_PUSH=true FAKE_MKOSI_SNAPSHOT=s1
+check "first" "$(outval "$wd" new-version)" "0.0.1"
+rm -rf "$wd"
+
+# --------------------------------------------------------------------------
+echo "test: dispatch-workflow fires on the new tag after push"
+wd="$(workdir)"; ( cd "$wd" || exit 1
+  git init -q -b main; git config user.email a@b.c; git config user.name t
+  printf '[Distribution]\nSnapshot=s0\n' > mkosi.conf
+  git add -A; git commit -qm init; git tag 0.1.0
+  git init -q --bare "$wd/remote.git"; git remote add origin "$wd/remote.git"
+  git push -q origin main )
+cat > "$wd/bin/gh" <<EOF
+#!/bin/sh
+echo "gh \$*" >> "$wd/gh.log"
+EOF
+chmod +x "$wd/bin/gh"
+run_bump "$wd" INPUT_BUMP_VERSION=patch INPUT_DISPATCH_WORKFLOW=release.yml FAKE_MKOSI_SNAPSHOT=s1
+check "dispatched" "$(cat "$wd/gh.log" 2>/dev/null)" "gh workflow run release.yml --ref 0.1.1"
+rm -rf "$wd"
+
+# --------------------------------------------------------------------------
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

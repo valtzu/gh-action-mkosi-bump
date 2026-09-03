@@ -30,6 +30,7 @@ die()  { printf '::error::%s\n' "$*" >&2; exit 1; }
 : "${INPUT_SKIP_PUSH:=false}"
 : "${INPUT_COMMIT_NO_VERIFY:=false}"
 : "${INPUT_TARGET_BRANCH:=}"
+: "${INPUT_DISPATCH_WORKFLOW:=}"
 : "${INPUT_PULL_REQUEST:=false}"
 : "${INPUT_PULL_REQUEST_STRATEGY:=update}"
 : "${INPUT_PULL_REQUEST_BRANCH:=mkosi-bump}"
@@ -41,6 +42,33 @@ die()  { printf '::error::%s\n' "$*" >&2; exit 1; }
 is_true() { [ "${1,,}" = "true" ] || [ "$1" = "1" ]; }
 
 out() { printf '%s=%s\n' "$1" "$2" >> "$GITHUB_OUTPUT"; }
+
+# bump-version: true -> `mkosi bump`; patch/minor/major -> increment the latest
+# git tag; anything else -> leave the version alone.
+case "${INPUT_BUMP_VERSION,,}" in
+  true|1)            VERSION_MODE=mkosi ;;
+  patch|minor|major) VERSION_MODE="${INPUT_BUMP_VERSION,,}" ;;
+  *)                 VERSION_MODE=none ;;
+esac
+
+# next_semver <part> -> "MAJOR.MINOR.PATCH", the latest <prefix>X.Y.Z<suffix>
+# tag with <part> incremented (0.0.0 when there is no such tag yet).
+next_semver() {
+  local part="$1" pfx sfx latest base maj min pat
+  pfx="$(printf '%s' "$INPUT_TAG_PREFIX" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
+  sfx="$(printf '%s' "$INPUT_TAG_SUFFIX" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
+  latest="$(git tag --list 2>/dev/null \
+            | { grep -E "^${pfx}[0-9]+\.[0-9]+\.[0-9]+${sfx}\$" || true; } \
+            | sort -V | tail -n1)"
+  base="${latest#"$INPUT_TAG_PREFIX"}"; base="${base%"$INPUT_TAG_SUFFIX"}"
+  IFS=. read -r maj min pat <<<"${base:-0.0.0}"
+  case "$part" in
+    major) maj=$((maj + 1)); min=0; pat=0 ;;
+    minor) min=$((min + 1)); pat=0 ;;
+    patch) pat=$((pat + 1)) ;;
+  esac
+  printf '%s.%s.%s' "${maj:-0}" "${min:-0}" "${pat:-0}"
+}
 
 MKOSI=(mkosi)
 # shellcheck disable=SC2206
@@ -54,7 +82,7 @@ SNAPSHOT_SETTINGS=()
 is_true "$INPUT_BUMP_SNAPSHOT"            && SNAPSHOT_SETTINGS+=(Snapshot)
 is_true "$INPUT_BUMP_TOOLS_TREE_SNAPSHOT" && SNAPSHOT_SETTINGS+=(ToolsTreeSnapshot)
 
-if ! is_true "$INPUT_BUMP_VERSION" && [ ${#SNAPSHOT_SETTINGS[@]} -eq 0 ]; then
+if [ "$VERSION_MODE" = none ] && [ ${#SNAPSHOT_SETTINGS[@]} -eq 0 ]; then
   die "nothing to do: enable at least one of bump-version / bump-snapshot / bump-tools-tree-snapshot"
 fi
 
@@ -90,7 +118,10 @@ read_setting() {
   sed -nE "s/^\s*${name}=\s*(.*[^[:space:]])\s*\$/\1/p" "$f" | tail -n1
 }
 
-OLD_VERSION="$(read_version_file)"
+# Only meaningful in `mkosi` mode - in semver mode mkosi.version is usually a
+# `git describe` script, so reading it as text would be nonsense.
+OLD_VERSION=""
+if [ "$VERSION_MODE" = mkosi ]; then OLD_VERSION="$(read_version_file)"; fi
 NEW_VERSION="$OLD_VERSION"
 log "old version:  ${OLD_VERSION:-<none>}"
 
@@ -101,13 +132,19 @@ SNAPSHOT_SUMMARY=""
 ###############################################################################
 # 2. Apply updates
 ###############################################################################
-if is_true "$INPUT_BUMP_VERSION"; then
-  group_begin "mkosi bump"
-  "${MKOSI[@]}" bump
-  group_end
-  NEW_VERSION="$(read_version_file)"
-  log "new version: ${NEW_VERSION:-<none>}"
-fi
+case "$VERSION_MODE" in
+  mkosi)
+    group_begin "mkosi bump"
+    "${MKOSI[@]}" bump
+    group_end
+    NEW_VERSION="$(read_version_file)"
+    log "new version: ${NEW_VERSION:-<none>}"
+    ;;
+  patch | minor | major)
+    NEW_VERSION="$(next_semver "$VERSION_MODE")"
+    log "new version: $NEW_VERSION ($VERSION_MODE bump of the latest tag)"
+    ;;
+esac
 
 # update_snapshot <SettingName> <extra latest-snapshot args...>
 update_snapshot() {
@@ -267,10 +304,23 @@ default_branch() {
     || echo "${GITHUB_REF_NAME:-main}"
 }
 
+NEW_TAG=""
 make_tag() {
   is_true "$INPUT_SKIP_TAG" && return 0
   git tag -f "$FULL_VERSION" -m "$COMMIT_MSG"
+  NEW_TAG="$FULL_VERSION"
   out new-tag "$FULL_VERSION"
+}
+
+# Kick a downstream workflow: a tag/commit pushed with GITHUB_TOKEN does not
+# start `on: push` runs, but `workflow_dispatch` always fires.
+dispatch_workflow() {
+  [ -n "$INPUT_DISPATCH_WORKFLOW" ] || return 0
+  command -v gh >/dev/null 2>&1 || { log "dispatch-workflow set but gh is unavailable"; return 0; }
+  local ref="${NEW_TAG:-$1}"
+  log "dispatching workflow $INPUT_DISPATCH_WORKFLOW on $ref"
+  gh workflow run "$INPUT_DISPATCH_WORKFLOW" --ref "$ref" \
+    || log "could not dispatch $INPUT_DISPATCH_WORKFLOW (check the workflow name and that it has workflow_dispatch)"
 }
 
 if ! is_true "$INPUT_PULL_REQUEST"; then
@@ -288,6 +338,7 @@ if ! is_true "$INPUT_PULL_REQUEST"; then
   make_tag
   if ! is_true "$INPUT_SKIP_PUSH"; then
     git push origin "HEAD:$BRANCH" --follow-tags
+    dispatch_workflow "$BRANCH"
   fi
   exit 0
 fi

@@ -1,0 +1,30 @@
+# Weekly: move Snapshot= to the newest package set, commit it straight to the
+# default branch, tag the next patch release and kick the release workflow.
+# `mkosi.version` stays a `git describe` script, so `bump-version: patch` takes
+# the version from the latest tag instead of writing the file.
+name: weekly package release
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write     # for dispatch-workflow
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # tags, for `git describe` / the patch bump
+      - uses: valtzu/gh-action-mkosi-bump@v1
+        with:
+          bump-version: patch
+          bump-snapshot: "true"
+          bump-tools-tree-snapshot: "false"
+          install-mkosi: "true"
+          mkosi-version: "v27"
+          dispatch-workflow: release.yml   # your `on: push: tags` build, which needs `workflow_dispatch:` too
