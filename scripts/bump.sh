@@ -119,9 +119,13 @@ update_snapshot() {
   SNAP_FILE[$name]="$cfg"
   OLD_SNAP[$name]="$old"
 
+  # `--tools-tree=` disables the default tools tree for this call: `mkosi
+  # latest-snapshot` otherwise looks for `curl` inside the (usually unbuilt)
+  # tools tree. It only needs the host's curl. A later `--tools-tree=<path>` in
+  # the user's args wins, so this stays overridable.
   group_begin "mkosi latest-snapshot ($name)"
   set +e
-  latest="$("${MKOSI[@]}" latest-snapshot "$@" 2>&1)"; rc=$?
+  latest="$("${MKOSI[@]}" latest-snapshot --tools-tree= "$@" 2>&1)"; rc=$?
   set -e
   group_end
   if [ $rc -ne 0 ]; then

@@ -10,6 +10,7 @@ args=(); is_tools=0
 for a in "$@"; do
   case "$a" in
     --distribution|--distribution=*|-d|--release|-r) ;;   # swallow common globals
+    --tools-tree=*|--tools-tree) ;;                       # swallow (real mkosi arg)
     --tools) is_tools=1 ;;                                # test-only marker
     *) args+=("$a") ;;
   esac

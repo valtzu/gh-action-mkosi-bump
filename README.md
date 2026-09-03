@@ -142,10 +142,10 @@ Template placeholders: `{{version}}`, `{{snapshot}}`, `{{tools_tree_snapshot}}`,
   On runners without passwordless sudo, run that yourself in an earlier step.
   `bump-version`-only runs don't need it.
 * **`ToolsTree=default`.** With a default tools tree configured, `mkosi
-  latest-snapshot` looks for `curl` *inside* the (possibly unbuilt) tools tree and
-  fails with `curl not found`. Either build the tools tree first
-  (`mkosi -t none box true`) or run snapshot updates from a checkout/job where
-  `ToolsTree=` is unset.
+  latest-snapshot` would look for `curl` *inside* the (usually unbuilt) tools tree
+  and fail with `curl not found`. The action passes `--tools-tree=` to those calls
+  so the host's `curl` is used instead. To force the tools tree anyway, append
+  your own `--tools-tree=<path>` via `latest-snapshot-args`.
 
 ## Development
 
