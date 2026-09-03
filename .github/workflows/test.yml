@@ -34,8 +34,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: allow unprivileged user namespaces (mkosi sandbox)
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: install mkosi ${{ matrix.mkosi }}
         run: |
           python -m pip install --upgrade pip
@@ -69,7 +67,6 @@ jobs:
           bump-snapshot: "true"
           install-mkosi: "true"
           mkosi-version: "v27"
-          relax-userns-restriction: "true"
           skip-push: "true"
       - run: |
           test "${{ steps.bump.outputs.changed }}" = "true"

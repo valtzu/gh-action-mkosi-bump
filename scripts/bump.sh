@@ -144,6 +144,21 @@ update_snapshot() {
   fi
 }
 
+# `mkosi latest-snapshot` fetches over the network inside mkosi's sandbox, which
+# needs an unprivileged user namespace. GitHub-hosted runners disable those via
+# AppArmor; relax it when we can (best effort, ephemeral runner).
+relax_userns() {
+  local knob=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+  [ -r "$knob" ] && [ "$(cat "$knob")" = 1 ] || return 0
+  if sudo -n sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 >/dev/null 2>&1; then
+    log "relaxed kernel.apparmor_restrict_unprivileged_userns for the mkosi sandbox"
+  else
+    log "note: kernel.apparmor_restrict_unprivileged_userns=1 and it could not be" \
+        "relaxed (no passwordless sudo); 'mkosi latest-snapshot' may fail"
+  fi
+}
+[ ${#SNAPSHOT_SETTINGS[@]} -gt 0 ] && relax_userns
+
 for s in "${SNAPSHOT_SETTINGS[@]}"; do
   case "$s" in
     Snapshot)          # shellcheck disable=SC2086
