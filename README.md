@@ -85,6 +85,7 @@ at the tools-tree distribution, e.g. `--distribution debian --release testing`.
 | `mkosi-config` | *(auto)* | config file whose snapshot setting(s) to update |
 | `mkosi-args` | | extra global args for every mkosi call, e.g. `--distribution debian` |
 | `snapshot-settings` | `Snapshot` | which settings to bump: `Snapshot`, `ToolsTreeSnapshot`, or both (comma-separated) |
+| `relax-userns-restriction` | `false` | run `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` first (needed for `mkosi latest-snapshot` on GitHub-hosted runners) |
 | `latest-snapshot-args` | | extra args for `mkosi latest-snapshot` when resolving `Snapshot=` |
 | `tools-tree-latest-snapshot-args` | *(= latest-snapshot-args)* | ditto for `ToolsTreeSnapshot=`, e.g. `--distribution debian --release testing` |
 | `install-mkosi` | `false` | `pip install` mkosi before running |
@@ -128,6 +129,20 @@ Template placeholders: `{{version}}`, `{{snapshot}}`, `{{tools_tree_snapshot}}`,
 
 * Direct commit / push: `permissions: contents: write`.
 * PR mode: also `pull-requests: write`.
+
+## GitHub-hosted runner notes
+
+* **User namespaces.** `mkosi latest-snapshot` fetches over the network inside
+  mkosi's sandbox, which needs unprivileged user namespaces. GitHub-hosted Ubuntu
+  runners block those by default (`prctl … Operation not permitted`). Set
+  `relax-userns-restriction: "true"`, or run
+  `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` yourself before
+  this step. `bump`-only mode does not need it.
+* **`ToolsTree=default`.** With a default tools tree configured, `mkosi
+  latest-snapshot` looks for `curl` *inside* the (possibly unbuilt) tools tree and
+  fails with `curl not found`. Either build the tools tree first
+  (`mkosi -t none box true`) or run snapshot updates from a checkout/job where
+  `ToolsTree=` is unset.
 
 ## Development
 

@@ -24,7 +24,7 @@ workdir() {
 run_bump() {
   # run_bump <workdir> KEY=VAL ...
   local wd="$1"; shift
-  ( cd "$wd"
+  ( cd "$wd" || exit 1
     export PATH="$wd/bin:$PATH"
     export GITHUB_OUTPUT="$wd/output"
     : > "$GITHUB_OUTPUT"
@@ -114,7 +114,7 @@ rm -rf "$wd"
 
 # --------------------------------------------------------------------------
 echo "test: end-to-end commit + tag in a real git repo (no push)"
-wd="$(workdir)"; ( cd "$wd"
+wd="$(workdir)"; ( cd "$wd" || exit 1
   git init -q -b main; git config user.email a@b.c; git config user.name t
   echo -n "1.0.0" > mkosi.version
   printf '[Distribution]\nSnapshot=s0\n' > mkosi.conf

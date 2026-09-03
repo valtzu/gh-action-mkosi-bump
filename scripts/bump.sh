@@ -52,7 +52,8 @@ log "Using $("${MKOSI[@]}" --version 2>/dev/null | head -n1)"
 # 1. Capture current state
 ###############################################################################
 read_version_file() {
-  [ -f mkosi.version ] && tr -d '[:space:]' < mkosi.version || true
+  [ -f mkosi.version ] || return 0
+  tr -d '[:space:]' < mkosi.version
 }
 
 # The config section each supported snapshot setting belongs to.

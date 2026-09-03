@@ -11,7 +11,7 @@ echo "mkosi: $(mkosi --version)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 cp -r "$HERE/fixtures/bump/." "$work/"
-cd "$work"
+cd "$work" || exit 1
 git init -q -b main
 git config user.email test@example.com
 git config user.name test
@@ -31,16 +31,26 @@ echo "bump: $old -> $new"
 git rev-parse "v${new}" >/dev/null || { echo "FAIL: tag missing"; exit 1; }
 echo "PASS: bump"
 
-# --- latest-snapshot (best effort: needs a reachable mirror) ---
-if mkosi latest-snapshot --help >/dev/null 2>&1; then
-  : > "$GITHUB_OUTPUT"
-  git checkout -q .
-  if INPUT_MODE=snapshot INPUT_SKIP_COMMIT=true MKOSI_BUMP_DRY_RUN=1 \
-       bash "$ROOT/scripts/bump.sh"; then
-    echo "PASS: latest-snapshot -> $(outval new-snapshot)"
-  else
-    echo "SKIP: latest-snapshot failed (mirror unreachable?)"
-  fi
-else
-  echo "SKIP: this mkosi has no latest-snapshot verb"
-fi
+# --- Snapshot= via mkosi latest-snapshot (needs snapshot.debian.org reachable) ---
+: > "$GITHUB_OUTPUT"
+git checkout -q .
+INPUT_MODE=snapshot INPUT_SKIP_COMMIT=true MKOSI_BUMP_DRY_RUN=1 \
+  bash "$ROOT/scripts/bump.sh"
+snap="$(outval new-snapshot)"
+[ -n "$snap" ] || { echo "FAIL: empty snapshot"; exit 1; }
+grep -q "Snapshot=${snap}" mkosi.conf || { echo "FAIL: Snapshot= not written"; exit 1; }
+echo "PASS: Snapshot -> $snap"
+
+# --- ToolsTreeSnapshot= into [Build], with explicit tools-tree distro args ---
+: > "$GITHUB_OUTPUT"
+git checkout -q .
+INPUT_MODE=snapshot INPUT_SKIP_COMMIT=true MKOSI_BUMP_DRY_RUN=1 \
+  INPUT_SNAPSHOT_SETTINGS=ToolsTreeSnapshot \
+  INPUT_TOOLS_TREE_LATEST_SNAPSHOT_ARGS="--distribution debian --release testing" \
+  bash "$ROOT/scripts/bump.sh"
+tt="$(outval new-tools-tree-snapshot)"
+[ -n "$tt" ] || { echo "FAIL: empty tools-tree snapshot"; exit 1; }
+grep -q "ToolsTreeSnapshot=${tt}" mkosi.conf || { echo "FAIL: ToolsTreeSnapshot= not written"; exit 1; }
+awk '/^\[Build\]/{b=1} b&&/ToolsTreeSnapshot=/{ok=1} END{exit !ok}' mkosi.conf \
+  || { echo "FAIL: ToolsTreeSnapshot= not under [Build]"; exit 1; }
+echo "PASS: ToolsTreeSnapshot -> $tt"

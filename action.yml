@@ -30,6 +30,9 @@ inputs:
     default: ''
 
   # --- mkosi installation ---
+  relax-userns-restriction:
+    description: 'If true, run `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` first. GitHub-hosted Ubuntu runners block the unprivileged user namespaces that mkosi''s sandbox (used by `mkosi latest-snapshot`) needs.'
+    default: 'false'
   install-mkosi:
     description: 'If true, install mkosi via pip before running.'
     default: 'false'
@@ -133,6 +136,11 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    - id: userns
+      if: ${{ inputs.relax-userns-restriction == 'true' }}
+      shell: bash
+      run: |
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
     - id: install
       if: ${{ inputs.install-mkosi == 'true' }}
       shell: bash

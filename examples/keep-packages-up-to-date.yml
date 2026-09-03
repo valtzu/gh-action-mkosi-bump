@@ -22,6 +22,9 @@ jobs:
           mode: both
           install-mkosi: "true"
           mkosi-version: "v27"
+          # mkosi's sandbox needs unprivileged user namespaces, which
+          # GitHub-hosted Ubuntu runners block by default.
+          relax-userns-restriction: "true"
           pull-request: "true"
           pull-request-strategy: update   # one rolling PR; use "new" for a PR per bump
           pull-request-branch: mkosi-bump
