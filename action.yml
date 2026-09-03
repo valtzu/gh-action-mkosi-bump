@@ -54,8 +54,8 @@ inputs:
     description: 'git user.email for the bump commit.'
     default: '41898282+github-actions[bot]@users.noreply.github.com'
   commit-message:
-    description: 'Commit message template. Placeholders: {{version}}, {{snapshot}}, {{old_version}}, {{old_snapshot}}.'
-    default: 'ci: bump mkosi packages to {{version}}'
+    description: 'Commit message template. Placeholders {{version}} {{snapshot}} {{tools_tree_snapshot}} {{old_version}} {{old_snapshot}}. Default: "Release {{version}}" when a version is bumped, else "Update mkosi package snapshot".'
+    default: ''
   tag-prefix:
     description: 'Prefix used for the git tag and the {{version}} placeholder.'
     default: ''
@@ -99,8 +99,8 @@ inputs:
     description: 'Base branch for the PR. Defaults to the repository default branch.'
     default: ''
   pull-request-title:
-    description: 'PR title template. Same placeholders as commit-message.'
-    default: 'ci: bump mkosi packages to {{version}}'
+    description: 'PR title template. Same placeholders and default as commit-message.'
+    default: ''
   pull-request-body:
     description: 'PR body template. Same placeholders, plus {{summary}} (a generated change list).'
     default: '{{summary}}'

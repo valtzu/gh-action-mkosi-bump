@@ -122,7 +122,7 @@ wd="$(workdir)"; ( cd "$wd" || exit 1
 run_bump "$wd" INPUT_SKIP_PUSH=true INPUT_TAG_PREFIX=v FAKE_MKOSI_SNAPSHOT=s1
 rc=$?
 check "exit code" "$rc" "0"
-check "committed"  "$(cd "$wd" && git log -1 --pretty=%s)" "ci: bump mkosi packages to v1.0.1"
+check "committed"  "$(cd "$wd" && git log -1 --pretty=%s)" "Release v1.0.1"
 check "tagged"     "$(cd "$wd" && git tag)" "v1.0.1"
 check "new-tag out" "$(outval "$wd" new-tag)" "v1.0.1"
 rm -rf "$wd"

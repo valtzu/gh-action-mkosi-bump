@@ -22,7 +22,7 @@ die()  { printf '::error::%s\n' "$*" >&2; exit 1; }
 : "${INPUT_TOOLS_TREE_LATEST_SNAPSHOT_ARGS:=}"
 : "${INPUT_GIT_USER_NAME:=github-actions[bot]}"
 : "${INPUT_GIT_USER_EMAIL:=41898282+github-actions[bot]@users.noreply.github.com}"
-[ -n "${INPUT_COMMIT_MESSAGE:-}" ] || INPUT_COMMIT_MESSAGE='ci: bump mkosi packages to {{version}}'
+: "${INPUT_COMMIT_MESSAGE:=}"   # default filled in below, once VERSION_MODE is known
 : "${INPUT_TAG_PREFIX:=}"
 : "${INPUT_TAG_SUFFIX:=}"
 : "${INPUT_SKIP_TAG:=false}"
@@ -35,7 +35,7 @@ die()  { printf '::error::%s\n' "$*" >&2; exit 1; }
 : "${INPUT_PULL_REQUEST_STRATEGY:=update}"
 : "${INPUT_PULL_REQUEST_BRANCH:=mkosi-bump}"
 : "${INPUT_BASE_BRANCH:=}"
-[ -n "${INPUT_PULL_REQUEST_TITLE:-}" ] || INPUT_PULL_REQUEST_TITLE='ci: bump mkosi packages to {{version}}'
+: "${INPUT_PULL_REQUEST_TITLE:=}"   # default filled in below, once VERSION_MODE is known
 [ -n "${INPUT_PULL_REQUEST_BODY:-}" ]  || INPUT_PULL_REQUEST_BODY='{{summary}}'
 : "${INPUT_PULL_REQUEST_LABELS:=}"
 
@@ -50,6 +50,13 @@ case "${INPUT_BUMP_VERSION,,}" in
   patch|minor|major) VERSION_MODE="${INPUT_BUMP_VERSION,,}" ;;
   *)                 VERSION_MODE=none ;;
 esac
+
+# Default commit message / PR title: a version bump is a release; otherwise it is
+# just a package-snapshot refresh.
+if [ "$VERSION_MODE" = none ]; then _default_msg='Update mkosi package snapshot'
+else                               _default_msg='Release {{version}}'; fi
+[ -n "$INPUT_COMMIT_MESSAGE" ]     || INPUT_COMMIT_MESSAGE="$_default_msg"
+[ -n "$INPUT_PULL_REQUEST_TITLE" ] || INPUT_PULL_REQUEST_TITLE="$_default_msg"
 
 # latest_release_tag -> the latest <prefix>X.Y.Z<suffix> git tag ("" if none).
 latest_release_tag() {

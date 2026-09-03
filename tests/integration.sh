@@ -27,7 +27,7 @@ INPUT_BUMP_SNAPSHOT=false INPUT_SKIP_PUSH=true INPUT_TAG_PREFIX=v \
 old="$(outval old-version)"; new="$(outval new-version)"
 echo "bump: $old -> $new"
 [ "$new" != "$old" ] || { echo "FAIL: version not bumped"; exit 1; }
-[ "$(git log -1 --pretty=%s)" = "ci: bump mkosi packages to v${new}" ] || { echo "FAIL: commit subject"; exit 1; }
+[ "$(git log -1 --pretty=%s)" = "Release v${new}" ] || { echo "FAIL: commit subject"; exit 1; }
 git rev-parse "v${new}" >/dev/null || { echo "FAIL: tag missing"; exit 1; }
 echo "PASS: bump"
 
