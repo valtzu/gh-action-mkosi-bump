@@ -51,7 +51,7 @@ Three independent switches — enable any combination (at least one):
 
 | Input | Default | Effect |
 |-------|---------|--------|
-| `bump-version` | `true` | `true` runs `mkosi bump` → increments `mkosi.version`. `patch` / `minor` / `major` instead increment that component of the latest `X.Y.Z` git tag and leave `mkosi.version` alone (for when it is a `git describe` script). `false` leaves the version untouched. |
+| `bump-version` | `true` | `true` runs `mkosi bump` → increments `mkosi.version`. `patch` / `minor` / `major` instead increment that component of the latest `X.Y.Z` git tag and leave `mkosi.version` alone (for when it is a `git describe` script); in these modes the run is a no-op (`changed=false`, no tag, no dispatch) unless a snapshot moved **or** the working tree differs from that last tag - so an unchanged repo produces no release. `false` leaves the version untouched. |
 | `bump-snapshot` | `true` | runs `mkosi latest-snapshot`, rewrites `Snapshot=` in `[Distribution]` if it changed |
 | `bump-tools-tree-snapshot` | `false` | runs `mkosi latest-snapshot`, rewrites `ToolsTreeSnapshot=` in `[Build]` if it changed |
 

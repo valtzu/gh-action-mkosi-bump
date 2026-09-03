@@ -51,15 +51,22 @@ case "${INPUT_BUMP_VERSION,,}" in
   *)                 VERSION_MODE=none ;;
 esac
 
-# next_semver <part> -> "MAJOR.MINOR.PATCH", the latest <prefix>X.Y.Z<suffix>
-# tag with <part> incremented (0.0.0 when there is no such tag yet).
-next_semver() {
-  local part="$1" pfx sfx latest base maj min pat
+# latest_release_tag -> the latest <prefix>X.Y.Z<suffix> git tag ("" if none).
+latest_release_tag() {
+  local pfx sfx
   pfx="$(printf '%s' "$INPUT_TAG_PREFIX" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
   sfx="$(printf '%s' "$INPUT_TAG_SUFFIX" | sed 's/[][\.^$*+?(){}|]/\\&/g')"
-  latest="$(git tag --list 2>/dev/null \
-            | { grep -E "^${pfx}[0-9]+\.[0-9]+\.[0-9]+${sfx}\$" || true; } \
-            | sort -V | tail -n1)"
+  git tag --list 2>/dev/null \
+    | { grep -E "^${pfx}[0-9]+\.[0-9]+\.[0-9]+${sfx}\$" || true; } \
+    | sort -V | tail -n1
+}
+
+# next_semver <part> -> "MAJOR.MINOR.PATCH", the latest <prefix>X.Y.Z<suffix>
+# tag with <part> incremented (0.0.0 when there is no such tag yet).
+PREV_TAG=""
+next_semver() {
+  local part="$1" latest base maj min pat
+  latest="$(latest_release_tag)"
   base="${latest#"$INPUT_TAG_PREFIX"}"; base="${base%"$INPUT_TAG_SUFFIX"}"
   IFS=. read -r maj min pat <<<"${base:-0.0.0}"
   case "$part" in
@@ -141,8 +148,9 @@ case "$VERSION_MODE" in
     log "new version: ${NEW_VERSION:-<none>}"
     ;;
   patch | minor | major)
+    PREV_TAG="$(latest_release_tag)"
     NEW_VERSION="$(next_semver "$VERSION_MODE")"
-    log "new version: $NEW_VERSION ($VERSION_MODE bump of the latest tag)"
+    log "new version: $NEW_VERSION ($VERSION_MODE bump of ${PREV_TAG:-<no tag>})"
     ;;
 esac
 
@@ -233,6 +241,18 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   git diff --quiet || CHANGED=true
   # also catch new untracked files (e.g. first-time mkosi.version)
   [ -z "$(git status --porcelain)" ] || CHANGED=true
+
+  # A semver bump cuts a release: also proceed when the working tree (with any
+  # snapshot bump applied) differs from the last release tag - i.e. commits
+  # landed on the branch since then, even if this run changed nothing itself.
+  # Conversely, if it is byte-identical to the last release, skip.
+  case "$VERSION_MODE" in
+    patch | minor | major)
+      if [ -z "${PREV_TAG:-}" ] || ! git diff --quiet "$PREV_TAG" -- 2>/dev/null; then
+        CHANGED=true
+      fi
+      ;;
+  esac
 else
   [ "$NEW_VERSION" != "$OLD_VERSION" ] && CHANGED=true
   for s in "${!NEW_SNAP[@]}"; do
@@ -334,7 +354,12 @@ if ! is_true "$INPUT_PULL_REQUEST"; then
     git checkout -B "$BRANCH" "origin/$BRANCH" 2>/dev/null || git checkout -B "$BRANCH"
     git stash pop >/dev/null 2>&1 || true
   fi
-  git commit "${COMMIT_ARGS[@]}"
+  if git diff --quiet && git diff --quiet --cached; then
+    # semver release with commits already on the branch but no bump of our own
+    log "no changes to commit - tagging the current HEAD"
+  else
+    git commit "${COMMIT_ARGS[@]}"
+  fi
   make_tag
   if ! is_true "$INPUT_SKIP_PUSH"; then
     git push origin "HEAD:$BRANCH" --follow-tags

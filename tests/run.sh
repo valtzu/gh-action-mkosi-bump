@@ -187,5 +187,31 @@ check "dispatched" "$(cat "$wd/gh.log" 2>/dev/null)" "gh workflow run release.ym
 rm -rf "$wd"
 
 # --------------------------------------------------------------------------
+echo "test: semver bump skips when tree is identical to the last release"
+wd="$(workdir)"; ( cd "$wd" || exit 1
+  git init -q -b main; git config user.email a@b.c; git config user.name t
+  printf 'log\noutput\nbin/\n' > .gitignore   # the harness scaffolding
+  printf '[Distribution]\nSnapshot=s0\n' > mkosi.conf
+  git add -A; git commit -qm init; git tag 0.1.0 )
+# snapshot unchanged (s0), no new commits -> nothing to release
+run_bump "$wd" INPUT_BUMP_VERSION=patch INPUT_SKIP_PUSH=true FAKE_MKOSI_SNAPSHOT=s0
+check "changed" "$(outval "$wd" changed)" "false"
+check "no tag"  "$(cd "$wd" && git tag -l 0.1.1)" ""
+rm -rf "$wd"
+
+# --------------------------------------------------------------------------
+echo "test: semver bump releases when commits landed since the last tag"
+wd="$(workdir)"; ( cd "$wd" || exit 1
+  git init -q -b main; git config user.email a@b.c; git config user.name t
+  printf 'log\noutput\nbin/\n' > .gitignore
+  printf '[Distribution]\nSnapshot=s0\n' > mkosi.conf
+  git add -A; git commit -qm init; git tag 0.1.0
+  echo 'unreleased change' > NEWFILE; git add -A; git commit -qm 'a fix' )
+run_bump "$wd" INPUT_BUMP_VERSION=patch INPUT_SKIP_PUSH=true FAKE_MKOSI_SNAPSHOT=s0
+check "changed" "$(outval "$wd" changed)" "true"
+check "new-tag" "$(outval "$wd" new-tag)" "0.1.1"
+rm -rf "$wd"
+
+# --------------------------------------------------------------------------
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
