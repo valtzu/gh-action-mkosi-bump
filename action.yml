@@ -14,13 +14,19 @@ inputs:
     description: 'Directory the mkosi config lives in / where mkosi is invoked.'
     default: '.'
   mkosi-config:
-    description: 'Path (relative to working-directory) of the config file whose `Snapshot=` should be updated. Defaults to autodetecting mkosi.conf / mkosi.conf.d/*.conf.'
+    description: 'Path (relative to working-directory) of the config file whose snapshot setting(s) should be updated. Defaults to autodetecting mkosi.conf / mkosi.conf.d/*.conf.'
     default: ''
   mkosi-args:
     description: 'Extra global args passed to every mkosi invocation (e.g. "--distribution debian").'
     default: ''
+  snapshot-settings:
+    description: 'Which snapshot setting(s) to bump in snapshot mode: comma-separated list of "Snapshot" ([Distribution]) and/or "ToolsTreeSnapshot" ([Build]).'
+    default: 'Snapshot'
   latest-snapshot-args:
-    description: 'Extra args appended to `mkosi latest-snapshot`.'
+    description: 'Extra args appended to `mkosi latest-snapshot` when resolving `Snapshot=`.'
+    default: ''
+  tools-tree-latest-snapshot-args:
+    description: 'Extra args appended to `mkosi latest-snapshot` when resolving `ToolsTreeSnapshot=` (e.g. "--distribution debian --release testing" for the tools tree distro). Falls back to latest-snapshot-args when empty.'
     default: ''
 
   # --- mkosi installation ---
@@ -108,6 +114,12 @@ outputs:
   new-snapshot:
     description: 'Snapshot= value after the update.'
     value: ${{ steps.run.outputs.new-snapshot }}
+  old-tools-tree-snapshot:
+    description: 'ToolsTreeSnapshot= value before the update.'
+    value: ${{ steps.run.outputs.old-tools-tree-snapshot }}
+  new-tools-tree-snapshot:
+    description: 'ToolsTreeSnapshot= value after the update.'
+    value: ${{ steps.run.outputs.new-tools-tree-snapshot }}
   new-tag:
     description: 'The newly created tag (empty when skip-tag).'
     value: ${{ steps.run.outputs.new-tag }}
@@ -145,7 +157,9 @@ runs:
         INPUT_MODE: ${{ inputs.mode }}
         INPUT_MKOSI_CONFIG: ${{ inputs.mkosi-config }}
         INPUT_MKOSI_ARGS: ${{ inputs.mkosi-args }}
+        INPUT_SNAPSHOT_SETTINGS: ${{ inputs.snapshot-settings }}
         INPUT_LATEST_SNAPSHOT_ARGS: ${{ inputs.latest-snapshot-args }}
+        INPUT_TOOLS_TREE_LATEST_SNAPSHOT_ARGS: ${{ inputs.tools-tree-latest-snapshot-args }}
         INPUT_GIT_USER_NAME: ${{ inputs.git-user-name }}
         INPUT_GIT_USER_EMAIL: ${{ inputs.git-user-email }}
         INPUT_COMMIT_MESSAGE: ${{ inputs.commit-message }}

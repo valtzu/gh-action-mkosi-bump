@@ -16,7 +16,9 @@ die()  { printf '::error::%s\n' "$*" >&2; exit 1; }
 : "${INPUT_MODE:=both}"
 : "${INPUT_MKOSI_CONFIG:=}"
 : "${INPUT_MKOSI_ARGS:=}"
+: "${INPUT_SNAPSHOT_SETTINGS:=Snapshot}"
 : "${INPUT_LATEST_SNAPSHOT_ARGS:=}"
+: "${INPUT_TOOLS_TREE_LATEST_SNAPSHOT_ARGS:=}"
 : "${INPUT_GIT_USER_NAME:=github-actions[bot]}"
 : "${INPUT_GIT_USER_EMAIL:=41898282+github-actions[bot]@users.noreply.github.com}"
 [ -n "${INPUT_COMMIT_MESSAGE:-}" ] || INPUT_COMMIT_MESSAGE='ci: bump mkosi packages to {{version}}'
@@ -53,38 +55,37 @@ read_version_file() {
   [ -f mkosi.version ] && tr -d '[:space:]' < mkosi.version || true
 }
 
-detect_config() {
-  if [ -n "$INPUT_MKOSI_CONFIG" ]; then
-    printf '%s\n' "$INPUT_MKOSI_CONFIG"
-    return
-  fi
-  local f
+# The config section each supported snapshot setting belongs to.
+declare -A SETTING_SECTION=(
+  [Snapshot]=Distribution
+  [ToolsTreeSnapshot]=Build
+)
+
+# find_config <SettingName> -> path of the config file to edit for that setting.
+find_config() {
+  local name="$1" f
+  if [ -n "$INPUT_MKOSI_CONFIG" ]; then printf '%s\n' "$INPUT_MKOSI_CONFIG"; return; fi
   for f in mkosi.conf mkosi.conf.d/*.conf; do
     [ -f "$f" ] || continue
-    if grep -qE '^\s*Snapshot=' "$f"; then printf '%s\n' "$f"; return; fi
+    if grep -qE "^\s*${name}=" "$f"; then printf '%s\n' "$f"; return; fi
   done
-  # No Snapshot= anywhere yet: fall back to the top-level config.
-  for f in mkosi.conf; do
-    [ -f "$f" ] && { printf '%s\n' "$f"; return; }
-  done
+  [ -f mkosi.conf ] && { printf 'mkosi.conf\n'; return; }
   printf '\n'
 }
 
-read_snapshot() {
-  local f="$1"
+read_setting() {
+  local name="$1" f="$2"
   [ -n "$f" ] && [ -f "$f" ] || return 0
-  sed -nE 's/^\s*Snapshot=\s*(.*[^[:space:]])\s*$/\1/p' "$f" | tail -n1
+  sed -nE "s/^\s*${name}=\s*(.*[^[:space:]])\s*\$/\1/p" "$f" | tail -n1
 }
 
 OLD_VERSION="$(read_version_file)"
-CONFIG_FILE="$(detect_config)"
-OLD_SNAPSHOT="$(read_snapshot "$CONFIG_FILE")"
-log "old version:  ${OLD_VERSION:-<none>}"
-log "config file:  ${CONFIG_FILE:-<none>}"
-log "old snapshot: ${OLD_SNAPSHOT:-<none>}"
-
 NEW_VERSION="$OLD_VERSION"
-NEW_SNAPSHOT="$OLD_SNAPSHOT"
+log "old version:  ${OLD_VERSION:-<none>}"
+
+# Per-setting bookkeeping, populated in section 2.
+declare -A OLD_SNAP NEW_SNAP SNAP_FILE
+SNAPSHOT_SUMMARY=""
 
 ###############################################################################
 # 2. Apply updates
@@ -97,35 +98,68 @@ if [ "$INPUT_MODE" = "bump" ] || [ "$INPUT_MODE" = "both" ]; then
   log "new version: ${NEW_VERSION:-<none>}"
 fi
 
-if [ "$INPUT_MODE" = "snapshot" ] || [ "$INPUT_MODE" = "both" ]; then
-  group_begin "mkosi latest-snapshot"
+# update_snapshot <SettingName> <extra latest-snapshot args...>
+update_snapshot() {
+  local name="$1"; shift
+  local section="${SETTING_SECTION[$name]:-Distribution}"
+  local cfg old latest rc
+  cfg="$(find_config "$name")"
+  old="$(read_setting "$name" "$cfg")"
+  SNAP_FILE[$name]="$cfg"
+  OLD_SNAP[$name]="$old"
+
+  group_begin "mkosi latest-snapshot ($name)"
   set +e
-  # shellcheck disable=SC2206
-  ls_args=($INPUT_LATEST_SNAPSHOT_ARGS)
-  latest="$("${MKOSI[@]}" latest-snapshot "${ls_args[@]}" 2>&1)"
-  rc=$?
+  latest="$("${MKOSI[@]}" latest-snapshot "$@" 2>&1)"; rc=$?
   set -e
   group_end
   if [ $rc -ne 0 ]; then
     log "$latest"
-    die "mkosi latest-snapshot failed (rc=$rc)"
+    die "mkosi latest-snapshot failed for $name (rc=$rc)"
   fi
   latest="$(printf '%s\n' "$latest" | tail -n1 | tr -d '[:space:]')"
-  log "latest snapshot: $latest"
-  if [ -z "$CONFIG_FILE" ]; then
-    die "could not determine which config file to write Snapshot= to (set mkosi-config)"
+  log "$name: ${old:-<none>} -> $latest  (${cfg:-<none>})"
+  NEW_SNAP[$name]="$latest"
+
+  [ "$latest" = "$old" ] && return 0
+  [ -n "$cfg" ] || die "could not determine which config file to write $name= to (set mkosi-config)"
+
+  if grep -qE "^\s*${name}=" "$cfg"; then
+    sed -i -E "s|^(\s*)${name}=.*|\1${name}=${latest}|" "$cfg"
+  elif grep -qE "^\[${section}\]" "$cfg"; then
+    sed -i -E "0,/^\[${section}\]/s||[${section}]\n${name}=${latest}|" "$cfg"
+  else
+    printf '\n[%s]\n%s=%s\n' "$section" "$name" "$latest" >> "$cfg"
   fi
-  if [ "$latest" != "$OLD_SNAPSHOT" ]; then
-    if grep -qE '^\s*Snapshot=' "$CONFIG_FILE"; then
-      sed -i -E "s|^(\s*)Snapshot=.*|\1Snapshot=${latest}|" "$CONFIG_FILE"
-    elif grep -qE '^\[Distribution\]' "$CONFIG_FILE"; then
-      sed -i -E "0,/^\[Distribution\]/s||[Distribution]\nSnapshot=${latest}|" "$CONFIG_FILE"
-    else
-      printf '\n[Distribution]\nSnapshot=%s\n' "$latest" >> "$CONFIG_FILE"
-    fi
-  fi
-  NEW_SNAPSHOT="$latest"
+}
+
+if [ "$INPUT_MODE" = "snapshot" ] || [ "$INPUT_MODE" = "both" ]; then
+  IFS=', ' read -r -a _settings <<<"$INPUT_SNAPSHOT_SETTINGS"
+  for s in "${_settings[@]}"; do
+    [ -n "$s" ] || continue
+    case "$s" in
+      Snapshot)          # shellcheck disable=SC2086
+        update_snapshot Snapshot $INPUT_LATEST_SNAPSHOT_ARGS ;;
+      ToolsTreeSnapshot)
+        _tt_args="${INPUT_TOOLS_TREE_LATEST_SNAPSHOT_ARGS:-$INPUT_LATEST_SNAPSHOT_ARGS}"
+        # shellcheck disable=SC2086
+        update_snapshot ToolsTreeSnapshot $_tt_args ;;
+      *) die "unknown snapshot setting: $s (expected Snapshot or ToolsTreeSnapshot)" ;;
+    esac
+  done
 fi
+
+# Primary snapshot values exposed to templates / outputs.
+OLD_SNAPSHOT="${OLD_SNAP[Snapshot]:-}"
+NEW_SNAPSHOT="${NEW_SNAP[Snapshot]:-$OLD_SNAPSHOT}"
+OLD_TT_SNAPSHOT="${OLD_SNAP[ToolsTreeSnapshot]:-}"
+NEW_TT_SNAPSHOT="${NEW_SNAP[ToolsTreeSnapshot]:-$OLD_TT_SNAPSHOT}"
+
+for s in "${!NEW_SNAP[@]}"; do
+  if [ "${NEW_SNAP[$s]}" != "${OLD_SNAP[$s]}" ]; then
+    SNAPSHOT_SUMMARY+=$'\n'"- ${s}: \`${OLD_SNAP[$s]:-none}\` → \`${NEW_SNAP[$s]}\` (\`${SNAP_FILE[$s]}\`)"
+  fi
+done
 
 FULL_VERSION="${INPUT_TAG_PREFIX}${NEW_VERSION}${INPUT_TAG_SUFFIX}"
 
@@ -139,7 +173,9 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   [ -z "$(git status --porcelain)" ] || CHANGED=true
 else
   [ "$NEW_VERSION" != "$OLD_VERSION" ] && CHANGED=true
-  [ "$NEW_SNAPSHOT" != "$OLD_SNAPSHOT" ] && CHANGED=true
+  for s in "${!NEW_SNAP[@]}"; do
+    [ "${NEW_SNAP[$s]}" != "${OLD_SNAP[$s]}" ] && CHANGED=true
+  done
 fi
 
 out changed "$CHANGED"
@@ -148,6 +184,8 @@ out new-version "$NEW_VERSION"
 out version "$FULL_VERSION"
 out old-snapshot "$OLD_SNAPSHOT"
 out new-snapshot "$NEW_SNAPSHOT"
+out old-tools-tree-snapshot "$OLD_TT_SNAPSHOT"
+out new-tools-tree-snapshot "$NEW_TT_SNAPSHOT"
 out new-tag ""
 out pull-request-number ""
 out pull-request-url ""
@@ -164,6 +202,7 @@ render() {
   local s="$1"
   s="${s//\{\{version\}\}/$FULL_VERSION}"
   s="${s//\{\{snapshot\}\}/$NEW_SNAPSHOT}"
+  s="${s//\{\{tools_tree_snapshot\}\}/$NEW_TT_SNAPSHOT}"
   s="${s//\{\{old_version\}\}/$OLD_VERSION}"
   s="${s//\{\{old_snapshot\}\}/$OLD_SNAPSHOT}"
   s="${s//\{\{summary\}\}/$SUMMARY}"
@@ -171,8 +210,8 @@ render() {
 }
 
 SUMMARY="Automated mkosi update:"$'\n'
-[ "$NEW_VERSION" != "$OLD_VERSION" ]   && SUMMARY+=$'\n'"- version: \`${OLD_VERSION:-none}\` → \`${NEW_VERSION}\`"
-[ "$NEW_SNAPSHOT" != "$OLD_SNAPSHOT" ] && SUMMARY+=$'\n'"- snapshot: \`${OLD_SNAPSHOT:-none}\` → \`${NEW_SNAPSHOT}\` (\`${CONFIG_FILE}\`)"
+[ "$NEW_VERSION" != "$OLD_VERSION" ] && SUMMARY+=$'\n'"- version: \`${OLD_VERSION:-none}\` → \`${NEW_VERSION}\`"
+SUMMARY+="$SNAPSHOT_SUMMARY"
 
 COMMIT_MSG="$(render "$INPUT_COMMIT_MESSAGE")"
 log "commit message: $COMMIT_MSG"

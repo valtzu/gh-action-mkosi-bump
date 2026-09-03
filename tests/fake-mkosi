@@ -6,10 +6,11 @@
 #   FAKE_MKOSI_SNAPSHOT_RC   - exit code for `latest-snapshot`    (default 0)
 set -euo pipefail
 
-args=()
+args=(); is_tools=0
 for a in "$@"; do
   case "$a" in
-    --distribution|--distribution=*|-d) ;;   # swallow a couple of common globals
+    --distribution|--distribution=*|-d|--release|-r) ;;   # swallow common globals
+    --tools) is_tools=1 ;;                                # test-only marker
     *) args+=("$a") ;;
   esac
 done
@@ -24,7 +25,13 @@ case "${args[0]:-}" in
     tr -d '\n' < mkosi.version ;;
   latest-snapshot)
     rc="${FAKE_MKOSI_SNAPSHOT_RC:-0}"
-    [ "$rc" = 0 ] && echo "${FAKE_MKOSI_SNAPSHOT:-20240115T000000Z}"
+    if [ "$rc" = 0 ]; then
+      if [ "$is_tools" = 1 ]; then
+        echo "${FAKE_MKOSI_TT_SNAPSHOT:-20240115T111111Z}"
+      else
+        echo "${FAKE_MKOSI_SNAPSHOT:-20240115T000000Z}"
+      fi
+    fi
     exit "$rc" ;;
   *)
     echo "fake-mkosi: unhandled verb: ${args[*]}" >&2

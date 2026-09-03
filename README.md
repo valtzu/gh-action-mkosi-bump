@@ -8,7 +8,8 @@ but for mkosi instead of `npm version`.
 It can:
 
 1. Run `mkosi bump` (increment `mkosi.version`).
-2. Update `Snapshot=` in your mkosi config from `mkosi latest-snapshot`.
+2. Update `Snapshot=` (`[Distribution]`) and/or `ToolsTreeSnapshot=` (`[Build]`)
+   in your mkosi config from `mkosi latest-snapshot`.
 3. Commit / tag / push the result, the same way `gh-action-bump-version` does.
 4. Or open a pull request instead — either **one rolling PR** that gets amended
    on every run, or **a fresh PR per bump**.
@@ -48,13 +49,18 @@ More examples in [`examples/`](examples/).
 | `mode`     | Effect                                                                  |
 |------------|------------------------------------------------------------------------|
 | `bump`     | runs `mkosi bump`                                                       |
-| `snapshot` | runs `mkosi latest-snapshot` and rewrites `Snapshot=` if it changed     |
+| `snapshot` | runs `mkosi latest-snapshot` and rewrites the configured snapshot setting(s) if changed |
 | `both`     | *(default)* both of the above                                           |
 
-For `snapshot` mode the action finds the config file that already contains a
-`Snapshot=` line (top-level `mkosi.conf` or any `mkosi.conf.d/*.conf`). If none
-does, it writes one into `mkosi.conf` under `[Distribution]`. Override the target
-with `mkosi-config`.
+`snapshot` mode updates whatever `snapshot-settings` lists — `Snapshot`
+(`[Distribution]`), `ToolsTreeSnapshot` (`[Build]`), or both. For each, the action
+finds the config file that already contains that line (top-level `mkosi.conf` or
+any `mkosi.conf.d/*.conf`); if none does, it writes one into `mkosi.conf` under
+the appropriate section. Override the target file with `mkosi-config`.
+
+`mkosi latest-snapshot` resolves the snapshot for the *image* distribution. For
+`ToolsTreeSnapshot` you usually need `tools-tree-latest-snapshot-args` to point it
+at the tools-tree distribution, e.g. `--distribution debian --release testing`.
 
 ## PR vs direct commit (feature 4)
 
@@ -76,9 +82,11 @@ with `mkosi-config`.
 |-------|---------|-------------|
 | `mode` | `both` | `bump`, `snapshot`, or `both` |
 | `working-directory` | `.` | where the mkosi config lives / mkosi is invoked |
-| `mkosi-config` | *(auto)* | config file whose `Snapshot=` to update |
+| `mkosi-config` | *(auto)* | config file whose snapshot setting(s) to update |
 | `mkosi-args` | | extra global args for every mkosi call, e.g. `--distribution debian` |
-| `latest-snapshot-args` | | extra args for `mkosi latest-snapshot` |
+| `snapshot-settings` | `Snapshot` | which settings to bump: `Snapshot`, `ToolsTreeSnapshot`, or both (comma-separated) |
+| `latest-snapshot-args` | | extra args for `mkosi latest-snapshot` when resolving `Snapshot=` |
+| `tools-tree-latest-snapshot-args` | *(= latest-snapshot-args)* | ditto for `ToolsTreeSnapshot=`, e.g. `--distribution debian --release testing` |
 | `install-mkosi` | `false` | `pip install` mkosi before running |
 | `mkosi-version` | *(latest)* | tag/branch (`v27`, `main`) or PEP 440 specifier (`>=25,<26`) |
 
@@ -95,8 +103,8 @@ with `mkosi-config`.
 | `commit-no-verify` | `false` | `git commit --no-verify` |
 | `target-branch` | *(current)* | branch to commit on in non-PR mode |
 
-Template placeholders: `{{version}}`, `{{snapshot}}`, `{{old_version}}`,
-`{{old_snapshot}}`, and `{{summary}}` (PR body only).
+Template placeholders: `{{version}}`, `{{snapshot}}`, `{{tools_tree_snapshot}}`,
+`{{old_version}}`, `{{old_snapshot}}`, and `{{summary}}` (PR body only).
 
 ### Pull request
 | Input | Default | Description |
@@ -113,8 +121,8 @@ Template placeholders: `{{version}}`, `{{snapshot}}`, `{{old_version}}`,
 ## Outputs
 
 `changed`, `old-version`, `new-version`, `version` (with prefix/suffix),
-`old-snapshot`, `new-snapshot`, `new-tag`, `pull-request-number`,
-`pull-request-url`.
+`old-snapshot`, `new-snapshot`, `old-tools-tree-snapshot`,
+`new-tools-tree-snapshot`, `new-tag`, `pull-request-number`, `pull-request-url`.
 
 ## Permissions
 
@@ -129,8 +137,10 @@ bash tests/integration.sh  # runs against the real `mkosi` on PATH
 ```
 
 CI ([`.github/workflows/test.yml`](.github/workflows/test.yml)) runs the
-integration test against a matrix of real mkosi versions (`v23.1` … `v27` and
-`main`), because mkosi's CLI moves fast.
+integration test against a matrix of real mkosi versions (`v26`, `v27`, `main`),
+because mkosi's CLI moves fast. `Snapshot=` / `mkosi latest-snapshot` were
+introduced in mkosi v26, so that is the minimum supported version for snapshot
+mode; `bump` mode works with older mkosi too.
 
 ## License
 

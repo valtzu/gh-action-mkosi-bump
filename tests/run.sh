@@ -77,6 +77,34 @@ check "exit code" "$?" "1"
 rm -rf "$wd"
 
 # --------------------------------------------------------------------------
+echo "test: ToolsTreeSnapshot inserted into [Build], Snapshot untouched"
+wd="$(workdir)"
+printf '[Distribution]\nDistribution=arch\nSnapshot=20240101T000000Z\n\n[Build]\nToolsTree=default\n' > "$wd/mkosi.conf"
+run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_MODE=snapshot \
+  INPUT_SNAPSHOT_SETTINGS=ToolsTreeSnapshot \
+  INPUT_TOOLS_TREE_LATEST_SNAPSHOT_ARGS=--tools \
+  FAKE_MKOSI_TT_SNAPSHOT=20240505T000000Z
+check "tt output"    "$(outval "$wd" new-tools-tree-snapshot)" "20240505T000000Z"
+check "tt in file"   "$(grep -c 'ToolsTreeSnapshot=20240505T000000Z' "$wd/mkosi.conf")" "1"
+check "in [Build]"   "$(awk '/^\[Build\]/{b=1} b&&/ToolsTreeSnapshot=/{print "yes"; exit}' "$wd/mkosi.conf")" "yes"
+check "Snapshot kept" "$(grep -c '^Snapshot=20240101T000000Z' "$wd/mkosi.conf")" "1"
+rm -rf "$wd"
+
+# --------------------------------------------------------------------------
+echo "test: both snapshot settings at once, different values"
+wd="$(workdir)"
+printf '[Distribution]\nSnapshot=old\n\n[Build]\nToolsTreeSnapshot=oldtt\n' > "$wd/mkosi.conf"
+run_bump "$wd" MKOSI_BUMP_DRY_RUN=1 INPUT_MODE=snapshot \
+  INPUT_SNAPSHOT_SETTINGS="Snapshot, ToolsTreeSnapshot" \
+  INPUT_TOOLS_TREE_LATEST_SNAPSHOT_ARGS=--tools \
+  FAKE_MKOSI_SNAPSHOT=newmain FAKE_MKOSI_TT_SNAPSHOT=newtt
+check "main"     "$(outval "$wd" new-snapshot)" "newmain"
+check "tt"       "$(outval "$wd" new-tools-tree-snapshot)" "newtt"
+check "file main" "$(grep -c 'Snapshot=newmain' "$wd/mkosi.conf")" "1"
+check "file tt"   "$(grep -c 'ToolsTreeSnapshot=newtt' "$wd/mkosi.conf")" "1"
+rm -rf "$wd"
+
+# --------------------------------------------------------------------------
 echo "test: both mode + tag prefix/suffix in version output"
 wd="$(workdir)"; echo -n "0.1.0" > "$wd/mkosi.version"
 printf '[Distribution]\nSnapshot=old\n' > "$wd/mkosi.conf"
