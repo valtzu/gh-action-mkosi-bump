@@ -8,7 +8,12 @@ branding:
 inputs:
   # --- what to update (each is applied independently; at least one must be true) ---
   bump-version:
-    description: 'Run `mkosi bump` to increment the image version in `mkosi.version`.'
+    description: >-
+      How to bump the image version. `true` runs `mkosi bump` (writes
+      `mkosi.version`). `patch` / `minor` / `major` instead derive the new
+      version by incrementing that component of the latest matching git tag and
+      leave `mkosi.version` alone (use this when it is a `git describe` script).
+      `false` does not touch the version.
     default: 'true'
   bump-snapshot:
     description: 'Update `Snapshot=` in the `[Distribution]` section from `mkosi latest-snapshot`.'
@@ -71,6 +76,13 @@ inputs:
     default: 'false'
   target-branch:
     description: 'Branch to commit the bump on (non-PR mode). Defaults to the branch the workflow runs on.'
+    default: ''
+  dispatch-workflow:
+    description: >-
+      Non-PR mode only: after the bump is pushed, trigger this workflow (file
+      name or id) with `workflow_dispatch` against the new tag - or against the
+      branch when nothing was tagged. Use it to kick a release build, since a
+      tag pushed with GITHUB_TOKEN does not start `on: push` runs by itself.
     default: ''
 
   # --- pull request mode ---
@@ -175,6 +187,7 @@ runs:
         INPUT_SKIP_PUSH: ${{ inputs.skip-push }}
         INPUT_COMMIT_NO_VERIFY: ${{ inputs.commit-no-verify }}
         INPUT_TARGET_BRANCH: ${{ inputs.target-branch }}
+        INPUT_DISPATCH_WORKFLOW: ${{ inputs.dispatch-workflow }}
         INPUT_PULL_REQUEST: ${{ inputs.pull-request }}
         INPUT_PULL_REQUEST_STRATEGY: ${{ inputs.pull-request-strategy }}
         INPUT_PULL_REQUEST_BRANCH: ${{ inputs.pull-request-branch }}
