@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Minimal stand-in for the mkosi CLI, used by the fast unit tests.
+# Behaviour is controlled via env vars:
+#   FAKE_MKOSI_VERSION       - reported by `mkosi --version`      (default 25.3)
+#   FAKE_MKOSI_SNAPSHOT      - printed by `mkosi latest-snapshot` (default 20240115T000000Z)
+#   FAKE_MKOSI_SNAPSHOT_RC   - exit code for `latest-snapshot`    (default 0)
+set -euo pipefail
+
+args=()
+for a in "$@"; do
+  case "$a" in
+    --distribution|--distribution=*|-d) ;;   # swallow a couple of common globals
+    *) args+=("$a") ;;
+  esac
+done
+
+case "${args[0]:-}" in
+  --version)
+    echo "mkosi ${FAKE_MKOSI_VERSION:-25.3}" ;;
+  bump)
+    v="$(tr -d '[:space:]' < mkosi.version 2>/dev/null || echo 0)"
+    IFS=. read -r maj min pat <<<"$v"
+    printf '%s.%s.%s\n' "${maj:-0}" "${min:-0}" "$(( ${pat:-0} + 1 ))" > mkosi.version
+    tr -d '\n' < mkosi.version ;;
+  latest-snapshot)
+    rc="${FAKE_MKOSI_SNAPSHOT_RC:-0}"
+    [ "$rc" = 0 ] && echo "${FAKE_MKOSI_SNAPSHOT:-20240115T000000Z}"
+    exit "$rc" ;;
+  *)
+    echo "fake-mkosi: unhandled verb: ${args[*]}" >&2
+    exit 2 ;;
+esac

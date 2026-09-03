@@ -1,0 +1,74 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck scripts/bump.sh tests/*.sh tests/fake-mkosi
+      - name: unit tests
+        run: bash tests/run.sh
+
+  integration:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mkosi:
+          - "v23.1"
+          - "v24.3"
+          - "v25.3"
+          - "v26"
+          - "v27"
+          - "main"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: install mkosi ${{ matrix.mkosi }}
+        run: |
+          python -m pip install --upgrade pip
+          case "${{ matrix.mkosi }}" in
+            main) python -m pip install "git+https://github.com/systemd/mkosi.git@main" ;;
+            *)    python -m pip install "git+https://github.com/systemd/mkosi.git@${{ matrix.mkosi }}" ;;
+          esac
+          mkosi --version
+      - name: integration test
+        run: bash tests/integration.sh
+
+  # Sanity-check the composite action wiring itself.
+  action:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          mkdir -p /tmp/proj && cd /tmp/proj
+          git init -q -b main
+          git config user.email a@b.c && git config user.name t
+          printf '0.0.1' > mkosi.version
+          printf '[Distribution]\nDistribution=debian\n' > mkosi.conf
+          git add -A && git commit -qm init
+      - uses: ./
+        id: bump
+        with:
+          working-directory: /tmp/proj
+          mode: bump
+          install-mkosi: "true"
+          mkosi-version: "v27"
+          skip-push: "true"
+      - run: |
+          test "${{ steps.bump.outputs.changed }}" = "true"
+          test "${{ steps.bump.outputs.new-version }}" = "0.0.2"

@@ -1,0 +1,28 @@
+# Drop this in .github/workflows/ of a repo that builds an image with mkosi.
+# It checks for a newer package snapshot every night and keeps a single open PR
+# up to date until you merge it.
+name: mkosi package updates
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: valtzu/gh-action-mkosi-bump@v1
+        with:
+          mode: both
+          install-mkosi: "true"
+          mkosi-version: "v27"
+          pull-request: "true"
+          pull-request-strategy: update   # one rolling PR; use "new" for a PR per bump
+          pull-request-branch: mkosi-bump
+          pull-request-labels: dependencies

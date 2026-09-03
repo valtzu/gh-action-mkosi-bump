@@ -1,0 +1,166 @@
+name: 'mkosi bump'
+description: 'Keep mkosi images up-to-date: run `mkosi bump` and/or update `Snapshot=` from `mkosi latest-snapshot`, then commit / tag / push / open a PR.'
+author: 'valtzu'
+branding:
+  icon: 'package'
+  color: 'blue'
+
+inputs:
+  # --- what to update ---
+  mode:
+    description: 'What to update: "bump" (run `mkosi bump`), "snapshot" (update Snapshot= from `mkosi latest-snapshot`), or "both".'
+    default: 'both'
+  working-directory:
+    description: 'Directory the mkosi config lives in / where mkosi is invoked.'
+    default: '.'
+  mkosi-config:
+    description: 'Path (relative to working-directory) of the config file whose `Snapshot=` should be updated. Defaults to autodetecting mkosi.conf / mkosi.conf.d/*.conf.'
+    default: ''
+  mkosi-args:
+    description: 'Extra global args passed to every mkosi invocation (e.g. "--distribution debian").'
+    default: ''
+  latest-snapshot-args:
+    description: 'Extra args appended to `mkosi latest-snapshot`.'
+    default: ''
+
+  # --- mkosi installation ---
+  install-mkosi:
+    description: 'If true, install mkosi via pip before running.'
+    default: 'false'
+  mkosi-version:
+    description: 'mkosi version/ref to install when install-mkosi is true (e.g. "v25.3", "main", or a PEP 440 specifier). Empty installs the latest release.'
+    default: ''
+
+  # --- commit / tag (mirrors phips28/gh-action-bump-version) ---
+  git-user-name:
+    description: 'git user.name for the bump commit.'
+    default: 'github-actions[bot]'
+  git-user-email:
+    description: 'git user.email for the bump commit.'
+    default: '41898282+github-actions[bot]@users.noreply.github.com'
+  commit-message:
+    description: 'Commit message template. Placeholders: {{version}}, {{snapshot}}, {{old_version}}, {{old_snapshot}}.'
+    default: 'ci: bump mkosi packages to {{version}}'
+  tag-prefix:
+    description: 'Prefix used for the git tag and the {{version}} placeholder.'
+    default: ''
+  tag-suffix:
+    description: 'Suffix used for the git tag and the {{version}} placeholder.'
+    default: ''
+  skip-tag:
+    description: 'Do not create a git tag for the bump.'
+    default: 'false'
+  skip-commit:
+    description: 'Do not create a commit (implies skip-tag and skip-push).'
+    default: 'false'
+  skip-push:
+    description: 'Do not push commits or tags.'
+    default: 'false'
+  commit-no-verify:
+    description: 'Pass --no-verify to git commit.'
+    default: 'false'
+  target-branch:
+    description: 'Branch to commit the bump on (non-PR mode). Defaults to the branch the workflow runs on.'
+    default: ''
+
+  # --- pull request mode ---
+  pull-request:
+    description: 'If true, push the bump to a dedicated branch and open/update a pull request instead of committing to the target branch.'
+    default: 'false'
+  pull-request-strategy:
+    description: '"update" reuses a single open PR (force-pushes / amends its branch); "new" opens a fresh PR for every bump.'
+    default: 'update'
+  pull-request-branch:
+    description: 'Head branch for the PR. In "new" strategy the version+snapshot is appended to keep it unique.'
+    default: 'mkosi-bump'
+  base-branch:
+    description: 'Base branch for the PR. Defaults to the repository default branch.'
+    default: ''
+  pull-request-title:
+    description: 'PR title template. Same placeholders as commit-message.'
+    default: 'ci: bump mkosi packages to {{version}}'
+  pull-request-body:
+    description: 'PR body template. Same placeholders, plus {{summary}} (a generated change list).'
+    default: '{{summary}}'
+  pull-request-labels:
+    description: 'Comma-separated labels to apply to the PR.'
+    default: ''
+  github-token:
+    description: 'Token used for pushing and for the gh CLI.'
+    default: ${{ github.token }}
+
+outputs:
+  changed:
+    description: '"true" if any file was modified.'
+    value: ${{ steps.run.outputs.changed }}
+  old-version:
+    description: 'Version before the bump.'
+    value: ${{ steps.run.outputs.old-version }}
+  new-version:
+    description: 'Version after the bump (without tag prefix/suffix).'
+    value: ${{ steps.run.outputs.new-version }}
+  version:
+    description: 'New version including tag-prefix / tag-suffix.'
+    value: ${{ steps.run.outputs.version }}
+  old-snapshot:
+    description: 'Snapshot= value before the update.'
+    value: ${{ steps.run.outputs.old-snapshot }}
+  new-snapshot:
+    description: 'Snapshot= value after the update.'
+    value: ${{ steps.run.outputs.new-snapshot }}
+  new-tag:
+    description: 'The newly created tag (empty when skip-tag).'
+    value: ${{ steps.run.outputs.new-tag }}
+  pull-request-number:
+    description: 'Number of the opened/updated PR.'
+    value: ${{ steps.run.outputs.pull-request-number }}
+  pull-request-url:
+    description: 'URL of the opened/updated PR.'
+    value: ${{ steps.run.outputs.pull-request-url }}
+
+runs:
+  using: 'composite'
+  steps:
+    - id: install
+      if: ${{ inputs.install-mkosi == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        ref='${{ inputs.mkosi-version }}'
+        if [ -z "$ref" ]; then
+          pip install --user mkosi
+        else
+          case "$ref" in
+            [\<\>=!~]*) pip install --user "mkosi${ref}" ;;          # PEP 440 specifier
+            *)          pip install --user "git+https://github.com/systemd/mkosi.git@${ref}" ;;  # tag or branch
+          esac
+        fi
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+    - id: run
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_MKOSI_CONFIG: ${{ inputs.mkosi-config }}
+        INPUT_MKOSI_ARGS: ${{ inputs.mkosi-args }}
+        INPUT_LATEST_SNAPSHOT_ARGS: ${{ inputs.latest-snapshot-args }}
+        INPUT_GIT_USER_NAME: ${{ inputs.git-user-name }}
+        INPUT_GIT_USER_EMAIL: ${{ inputs.git-user-email }}
+        INPUT_COMMIT_MESSAGE: ${{ inputs.commit-message }}
+        INPUT_TAG_PREFIX: ${{ inputs.tag-prefix }}
+        INPUT_TAG_SUFFIX: ${{ inputs.tag-suffix }}
+        INPUT_SKIP_TAG: ${{ inputs.skip-tag }}
+        INPUT_SKIP_COMMIT: ${{ inputs.skip-commit }}
+        INPUT_SKIP_PUSH: ${{ inputs.skip-push }}
+        INPUT_COMMIT_NO_VERIFY: ${{ inputs.commit-no-verify }}
+        INPUT_TARGET_BRANCH: ${{ inputs.target-branch }}
+        INPUT_PULL_REQUEST: ${{ inputs.pull-request }}
+        INPUT_PULL_REQUEST_STRATEGY: ${{ inputs.pull-request-strategy }}
+        INPUT_PULL_REQUEST_BRANCH: ${{ inputs.pull-request-branch }}
+        INPUT_BASE_BRANCH: ${{ inputs.base-branch }}
+        INPUT_PULL_REQUEST_TITLE: ${{ inputs.pull-request-title }}
+        INPUT_PULL_REQUEST_BODY: ${{ inputs.pull-request-body }}
+        INPUT_PULL_REQUEST_LABELS: ${{ inputs.pull-request-labels }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/bump.sh"
