@@ -101,7 +101,7 @@ at the tools-tree distribution, e.g. `--distribution debian --release testing`.
 |-------|---------|-------------|
 | `git-user-name` | `github-actions[bot]` | commit author name |
 | `git-user-email` | `…github-actions[bot]@users.noreply.github.com` | commit author email |
-| `commit-message` | *(auto)* | template; defaults to `Release {{version}}` on a version bump, else `Update mkosi package snapshot` |
+| `commit-message` | *(auto)* | template; defaults to `Release {{version}}` on a version bump, else `Bump OS packages` / `Bump ToolsTree packages` / `Bump OS and ToolsTree packages` |
 | `tag-prefix` / `tag-suffix` | | wraps the tag and `{{version}}` |
 | `skip-tag` | `false` | don't create a tag |
 | `skip-commit` | `false` | don't commit (implies skip-tag/skip-push) |

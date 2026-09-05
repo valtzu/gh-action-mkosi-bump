@@ -51,13 +51,6 @@ case "${INPUT_BUMP_VERSION,,}" in
   *)                 VERSION_MODE=none ;;
 esac
 
-# Default commit message / PR title: a version bump is a release; otherwise it is
-# just a package-snapshot refresh.
-if [ "$VERSION_MODE" = none ]; then _default_msg='Update mkosi package snapshot'
-else                               _default_msg='Release {{version}}'; fi
-[ -n "$INPUT_COMMIT_MESSAGE" ]     || INPUT_COMMIT_MESSAGE="$_default_msg"
-[ -n "$INPUT_PULL_REQUEST_TITLE" ] || INPUT_PULL_REQUEST_TITLE="$_default_msg"
-
 # latest_release_tag -> the latest <prefix>X.Y.Z<suffix> git tag ("" if none).
 latest_release_tag() {
   local pfx sfx
@@ -239,6 +232,21 @@ for s in "${!NEW_SNAP[@]}"; do
 done
 
 FULL_VERSION="${INPUT_TAG_PREFIX}${NEW_VERSION}${INPUT_TAG_SUFFIX}"
+
+# Default commit message / PR title, when the user gave none. A version bump cuts
+# a release; otherwise name which package set actually moved.
+default_message() {
+  [ "$VERSION_MODE" = none ] || { printf 'Release {{version}}'; return; }
+  local os=false tt=false
+  [ "${NEW_SNAP[Snapshot]:-}" != "${OLD_SNAP[Snapshot]:-}" ] && os=true
+  [ "${NEW_SNAP[ToolsTreeSnapshot]:-}" != "${OLD_SNAP[ToolsTreeSnapshot]:-}" ] && tt=true
+  if $os && $tt; then printf 'Bump OS and ToolsTree packages'
+  elif $tt;     then printf 'Bump ToolsTree packages'
+  else               printf 'Bump OS packages'
+  fi
+}
+[ -n "$INPUT_COMMIT_MESSAGE" ]     || INPUT_COMMIT_MESSAGE="$(default_message)"
+[ -n "$INPUT_PULL_REQUEST_TITLE" ] || INPUT_PULL_REQUEST_TITLE="$(default_message)"
 
 ###############################################################################
 # 3. Did anything change?

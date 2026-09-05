@@ -127,6 +127,24 @@ check "tagged"     "$(cd "$wd" && git tag)" "v1.0.1"
 check "new-tag out" "$(outval "$wd" new-tag)" "v1.0.1"
 rm -rf "$wd"
 
+echo "test: default commit message names which package set moved (no version bump)"
+wd="$(workdir)"; ( cd "$wd" || exit 1
+  git init -q -b main; git config user.email a@b.c; git config user.name t
+  printf '[Distribution]\nSnapshot=s0\n\n[Build]\nToolsTreeSnapshot=t0\n' > mkosi.conf
+  git add -A; git commit -qm init )
+run_bump "$wd" INPUT_SKIP_PUSH=true INPUT_BUMP_VERSION=false \
+  INPUT_BUMP_SNAPSHOT=false INPUT_BUMP_TOOLS_TREE_SNAPSHOT=true FAKE_MKOSI_SNAPSHOT=t1
+check "tools-tree msg" "$(cd "$wd" && git log -1 --pretty=%s)" "Bump ToolsTree packages"
+rm -rf "$wd"
+
+wd="$(workdir)"; ( cd "$wd" || exit 1
+  git init -q -b main; git config user.email a@b.c; git config user.name t
+  printf '[Distribution]\nSnapshot=s0\n' > mkosi.conf
+  git add -A; git commit -qm init )
+run_bump "$wd" INPUT_SKIP_PUSH=true INPUT_BUMP_VERSION=false FAKE_MKOSI_SNAPSHOT=s1
+check "os msg" "$(cd "$wd" && git log -1 --pretty=%s)" "Bump OS packages"
+rm -rf "$wd"
+
 # --------------------------------------------------------------------------
 echo "test: bump-version=patch increments the latest tag, leaves mkosi.version alone"
 wd="$(workdir)"; ( cd "$wd" || exit 1
